@@ -13,8 +13,10 @@
 
 	<body>
 
-		<video id="localVideo" autoplay playsinline muted></video>
-		<video id="remoteVideo" autoplay playsinline></video>
+		<video id="localPrimaryVideo" autoplay playsinline muted></video>
+		<video id="localSecondaryVideo" autoplay playsinline></video>
+		<video id="remotePrimaryVideo" autoplay playsinline></video>
+		<video id="remoteSecondaryVideo" autoplay playsinline></video>
 
 		<div>
 			<p>
@@ -25,7 +27,7 @@
 			</p>
 			<p>
 				if you are the remote, paste the hosts offer and accept it:
-				<input type="text" id="remoteOffer" placeholder="remote offer"//><button id="acceptOffer">accept</button><br/>
+				<input type="text" id="remoteOffer" placeholder="remote offer"/><button id="acceptOffer">accept</button><br/>
 				Then copy your answer and send it to the host:
 				<input type="text" id="localAnswer" placeholder="local answer"/>
 			</p>
@@ -34,12 +36,13 @@
 		<script type="text/javascript">
 			'use strict';
 
-			const mediaStreamConstraints = {audio: true, video: true};
 			const offerOptions = {offerToReceiveAudio: 1, offerToReceiveVideo: 1};
 			const servers = {'iceServers': [{'url': 'stun:stun.l.google.com:19302'}]};
 
-			const localVideo = document.getElementById('localVideo');
-			const remoteVideo = document.getElementById('remoteVideo');
+			const localPrimaryVideo = document.getElementById('localPrimaryVideo');
+			const localSecondaryVideo = document.getElementById('localSecondaryVideo');
+			const remotePrimaryVideo = document.getElementById('remotePrimaryVideo');
+			const remoteSecondaryVideo = document.getElementById('remoteSecondaryVideo');
 
 			const localOffer = document.getElementById('localOffer');
 			const remoteOffer = document.getElementById('remoteOffer');
@@ -66,17 +69,36 @@
 			const peerMediaStream = new MediaStream();
 			peerConnection.addStream(peerMediaStream);
 
-			// get the video media stream
-			navigator.mediaDevices.getUserMedia(mediaStreamConstraints)
-				.then((mediaStream) => {
-				
-					localVideo.srcObject = mediaStream;
 
-					for (const track of mediaStream.getTracks())
+			// check for mic and camera separately to allow use on systems with only one
+			navigator.mediaDevices.getUserMedia({audio: true})
+				.then((mediaStream) => {
+					const track = mediaStream.getTracks()[0];
+					if (track) {
+						localPrimaryVideo.srcObject = mediaStream;
 						peerMediaStream.addTrack(track);
 					}
-				)
-				.catch(logError);
+				}).catch(logError);
+
+			navigator.mediaDevices.getUserMedia({video: true})
+				.then((mediaStream) => {
+					const track = mediaStream.getTracks()[0];
+					if (track) {
+						// check if stream already exists with microphone
+						if (!localPrimaryVideo.srcObject) localPrimaryVideo.srcObject = mediaStream;
+						else localPrimaryVideo.srcObject.addTrack(track);
+						peerMediaStream.addTrack(track);
+					}
+				}).catch(logError);
+
+			navigator.mediaDevices.getDisplayMedia({video: true})
+				.then((mediaStream) => {
+					const track = mediaStream.getTracks()[0];
+					if (track) {
+						localSecondaryVideo.srcObject = mediaStream;
+						peerMediaStream.addTrack(track);
+					}
+				}).catch(logError);
 	
 			function handleConnection(event) {
 
@@ -101,9 +123,26 @@
 			}
 					
 			function gotRemoteMediaStream(event) {
-
 				const mediaStream = event.stream;
-				remoteVideo.srcObject = mediaStream;
+				const microphone = mediaStream.getAudioTracks()[0];
+				const primaryVideo = mediaStream.getVideoTracks()[0];
+				const secondaryVideo = mediaStream.getVideoTracks()[1];
+
+				remotePrimaryVideo.srcObject = new MediaStream();
+				remoteSecondaryVideo.srcObject = new MediaStream();
+
+				if (microphone) {
+					remotePrimaryVideo.srcObject.addTrack(microphone);
+				}
+
+				if (primaryVideo) {
+					remotePrimaryVideo.srcObject.addTrack(primaryVideo);
+				}
+
+				if (secondaryVideo) {
+					remoteSecondaryVideo.srcObject.addTrack(secondaryVideo);
+				}
+
 				console.log('remote peer connection received remote stream')
 			}
 
